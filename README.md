@@ -1,2 +1,4 @@
 # life_simulation
-small life simulation in a random but natural enviroment
+### creator: LegendCloud
+
+this little life sim is inspired by creators like Primer and Icoso
