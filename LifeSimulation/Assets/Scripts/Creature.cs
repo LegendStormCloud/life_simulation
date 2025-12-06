@@ -10,14 +10,26 @@ public class Creature : MonoBehaviour
     float cosFOVh;
     public int steps = 12;
 
+    public float fakeRotation = 0;
+    public Vector2 fakeForward
+    {
+        get 
+        {
+            return Quaternion.Euler(0, 0, fakeRotation) * transform.right;
+        }
+    }
+
     //public bool foundFood;
     public bool searchingForFood = true;
     public GameObject targetFood;
+    public Vector3 targetPos;
     public float speed = 4f;
 
     void OnDrawGizmosSelected()
     {
-        Vector3 lastPos = Quaternion.Euler(0, 0, -FOV / 2) * transform.right * sight;
+        Gizmos.DrawWireSphere(targetPos, 0.1f);
+
+        Vector3 lastPos = Quaternion.Euler(0, 0, -FOV / 2) * fakeForward * sight;
         Gizmos.DrawLine(transform.position, transform.position + lastPos);
         for (int i = 0; i < steps; i++)
         {
@@ -36,46 +48,65 @@ public class Creature : MonoBehaviour
     void InitCreature()
     {
         cosFOVh = Mathf.Cos(FOV * Mathf.Deg2Rad / 2);
+        targetPos = Random.insideUnitCircle * sight;
         searchingForFood = true;
     }
 
+    void ResetSearchingFoodVars()
+    {
+        targetFood = null;
+        targetPos = Random.insideUnitCircle * sight;
+        searchingForFood = true;
+    }
+
+
     private void Update()
     {
-        Collider2D[] foodCs = Physics2D.OverlapCircleAll(transform.position, sight, foodMask);
-        if (foodCs.Length == 0) return;
-        foodCs = foodCs.OrderBy((f) => (f.transform.position - transform.position).sqrMagnitude).ToArray();
+        if (searchingForFood)
+        {
+            Vector3 delta = targetPos - transform.position;
+            if (delta.sqrMagnitude <= 0.01f)
+            {
+                targetPos = Random.insideUnitCircle.normalized * sight;
+            }
+            fakeRotation = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+            transform.Translate(delta.normalized * speed * Time.deltaTime);
 
-        targetFood = foodCs[0].transform.gameObject;
-        Vector3 fPos = foodCs[0].transform.position;
+            Collider2D[] foodCs = Physics2D.OverlapCircleAll(transform.position, sight, foodMask);
+            if (foodCs.Length == 0) return;
 
-        if ((fPos - transform.position).sqrMagnitude > sight * sight) return;
-        
-        float dotP = Vector2.Dot(transform.right, fPos);
-        if (dotP < 0) return;
+            foodCs = foodCs.OrderBy((f) => (f.transform.position - transform.position).sqrMagnitude).ToArray();
+            Vector3 fPos = foodCs[0].transform.position;
 
-        float cosF = dotP/(fPos.magnitude);
-        if (cosF < cosFOVh) return;
+            if ((fPos - transform.position).sqrMagnitude > sight * sight) return;
 
-        searchingForFood = false;
-        //inside the FOV, this works only with FOV angles between 0 adn 180
+            float dotP = Vector2.Dot(fakeForward, fPos);
+            if (dotP < 0) return;
 
-        if (!searchingForFood)
+            float cosF = dotP / (fPos.magnitude);
+            if (cosF < cosFOVh) return;
+
+            targetFood = foodCs[0].transform.gameObject;
+            searchingForFood = false;
+            //inside the FOV, this works only with FOV angles between 0 adn 180
+        }
+        else
         {
             if (targetFood == null)
             {
-                searchingForFood = true;
+                ResetSearchingFoodVars();
                 return;
             }
 
-            Vector3 dir = fPos - transform.position;
+            Vector3 dir = targetFood.transform.position - transform.position;
+            fakeRotation = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
             transform.Translate(dir.normalized * speed * Time.deltaTime);
 
+            if (dir.sqrMagnitude > sight * sight) ResetSearchingFoodVars();
             if (dir.sqrMagnitude > 0.01f) return;
 
             Destroy(targetFood);
-            targetFood = null;
-            searchingForFood = false;
-            Debug.Log("Food eaten");
+            ResetSearchingFoodVars();
         }
     }
 }
