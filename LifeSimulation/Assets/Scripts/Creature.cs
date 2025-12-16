@@ -2,11 +2,49 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
+[System.Serializable]
+public class Genes
+{
+    [Range(1.5f, 4.5f)]
+    public float speed = 3f;
+    [Range(0, 180)]
+    public float FOV = 45f;
+    [Range(0.5f, 3.5f)]
+    public float sight = 2f;
+
+    public Genes(Genes pA = null, Genes pB = null)
+    {
+        if (pA == null && pB != null || pA != null && pB == null)
+        {
+            Debug.LogError("Error only one of the parents has been inserted");
+            return;
+        }
+
+        //initial run
+        if (pA == null && pB == null)
+        {
+            speed = 3f; FOV = 45f; sight = 2f;
+            return;
+        }
+
+        //from reproduction of two creatures
+
+        float spd = (pA.speed + pB.speed) / 2 + (.3f * (Random.value - 0.5f));
+        float fov = (pA.FOV + pB.FOV) / 2 + (18f * (Random.value - 0.5f));
+        float sgt = (pA.sight + pB.sight) / 2 + (.3f * (Random.value - 0.5f));
+
+        speed = spd;
+        FOV = fov;
+        sight = sgt;
+    }
+}
+
 public class Creature : MonoBehaviour
 {
+    public Genes genes;
+
     public LayerMask foodMask;
-    public float sight;
-    public float FOV;
+
     float cosFOVh;
     public int steps = 12;
 
@@ -23,39 +61,36 @@ public class Creature : MonoBehaviour
     public bool searchingForFood = true;
     public GameObject targetFood;
     public Vector3 targetPos;
-    public float speed = 4f;
 
     void OnDrawGizmosSelected()
     {
         Gizmos.DrawWireSphere(targetPos, 0.1f);
 
-        Vector3 lastPos = Quaternion.Euler(0, 0, -FOV / 2) * fakeForward * sight;
+        Vector3 lastPos = Quaternion.Euler(0, 0, -genes.FOV / 2) * fakeForward * genes.sight;
         Gizmos.DrawLine(transform.position, transform.position + lastPos);
         for (int i = 0; i < steps; i++)
         {
-            Vector3 newPos = Quaternion.Euler(0, 0, FOV / steps) * lastPos;
+            Vector3 newPos = Quaternion.Euler(0, 0, genes.FOV / steps) * lastPos;
             Gizmos.DrawLine(transform.position + lastPos, transform.position + newPos);
             lastPos = newPos;
         }
         Gizmos.DrawLine(transform.position + lastPos, transform.position);
     }
 
-    private void Start()
+    public void InitCreature(Genes a = null, Genes b = null)
     {
-        InitCreature();
-    }
+        //set genes
+        genes = new(a, b);
 
-    void InitCreature()
-    {
-        cosFOVh = Mathf.Cos(FOV * Mathf.Deg2Rad / 2);
-        targetPos = Random.insideUnitCircle * sight;
+        cosFOVh = Mathf.Cos(genes.FOV * Mathf.Deg2Rad / 2);
+        targetPos = Random.insideUnitCircle * genes.sight;
         searchingForFood = true;
     }
 
     void ResetSearchingFoodVars()
     {
         targetFood = null;
-        targetPos = Random.insideUnitCircle * sight;
+        targetPos = Random.insideUnitCircle * genes.sight;
         searchingForFood = true;
     }
 
@@ -67,18 +102,22 @@ public class Creature : MonoBehaviour
             Vector3 delta = targetPos - transform.position;
             if (delta.sqrMagnitude <= 0.01f)
             {
-                targetPos = Random.insideUnitCircle.normalized * sight;
+                targetPos = Random.insideUnitCircle.normalized * genes.sight;
+                while(targetPos.sqrMagnitude > SimulationManager.instance.simRadius*SimulationManager.instance.simRadius)
+                {
+                    targetPos = Random.insideUnitCircle.normalized * genes.sight;
+                }
             }
             fakeRotation = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
-            transform.Translate(delta.normalized * speed * Time.deltaTime);
+            transform.Translate(delta.normalized * genes.speed * Time.deltaTime);
 
-            Collider2D[] foodCs = Physics2D.OverlapCircleAll(transform.position, sight, foodMask);
+            Collider2D[] foodCs = Physics2D.OverlapCircleAll(transform.position, genes.sight, foodMask);
             if (foodCs.Length == 0) return;
 
             foodCs = foodCs.OrderBy((f) => (f.transform.position - transform.position).sqrMagnitude).ToArray();
             Vector3 fPos = foodCs[0].transform.position;
 
-            if ((fPos - transform.position).sqrMagnitude > sight * sight) return;
+            if ((fPos - transform.position).sqrMagnitude > genes.sight * genes.sight) return;
 
             float dotP = Vector2.Dot(fakeForward, fPos);
             if (dotP < 0) return;
@@ -100,9 +139,9 @@ public class Creature : MonoBehaviour
 
             Vector3 dir = targetFood.transform.position - transform.position;
             fakeRotation = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
-            transform.Translate(dir.normalized * speed * Time.deltaTime);
+            transform.Translate(dir.normalized * genes.speed * Time.deltaTime);
 
-            if (dir.sqrMagnitude > sight * sight) ResetSearchingFoodVars();
+            if (dir.sqrMagnitude > genes.sight * genes.sight) ResetSearchingFoodVars();
             if (dir.sqrMagnitude > 0.01f) return;
 
             Destroy(targetFood);
